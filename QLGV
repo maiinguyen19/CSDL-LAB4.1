@@ -1,0 +1,165 @@
+--19. Khoa nào (mã khoa, tên khoa) được thành lập sớm nhất. 
+SELECT MAKHOA, TENKHOA
+FROM KHOA
+WHERE NGTLAP = ( SELECT MIN(NGTLAP) FROM KHOA )
+
+
+--20. Có bao nhiêu giáo viên có học hàm là “GS” hoặc “PGS”. 
+SELECT COUNT (*) ' Số giáo viên có học hàm là “GS” hoặc “PGS” '
+FROM GIAOVIEN
+WHERE HOCHAM IN ('GS', 'TS')
+
+
+--21. Thống kê có bao nhiêu giáo viên có học vị là “CN”, “KS”, “Ths”, “TS”, “PTS” trong mỗi khoa. 
+SELECT MaKhoa, HocVi, COUNT(*) 'Số giáo viên'
+FROM GiaoVien
+GROUP BY MaKhoa, HocVi
+ORDER BY MaKhoa
+
+
+--22. Mỗi môn học thống kê số lượng học viên theo kết quả (đạt và không đạt). 
+SELECT MAMH, KQUA, COUNT(*) 'số lượng học viên'
+FROM KETQUATHI
+GROUP BY MAMH, KQUA
+ORDER BY MAMH
+
+--23. Tìm giáo viên (mã giáo viên, họ tên) là giáo viên chủ nhiệm của một lớp, đồng thời dạy cho lớp đó ít nhất một môn học. 
+SELECT DISTINCT GIAOVIEN.MAGV, HOTEN
+FROM GIAOVIEN, LOP, GIANGDAY
+WHERE GIANGDAY.MALOP = LOP.MALOP
+      AND GIANGDAY.MAGV = GIAOVIEN.MAGV
+      AND GIAOVIEN.MAGV = LOP.MAGVCN;
+
+--24. Tìm họ tên lớp trưởng của lớp có sỉ số cao nhất. 
+SELECT HO + ' ' + TEN AS 'Họ tên lớp trưởng của lớp có sỉ số cao nhất'
+FROM HOCVIEN, LOP
+WHERE HOCVIEN.MAHV = LOP.TRGLOP
+      AND LOP.SISO = (
+          SELECT MAX(SISO) FROM LOP
+      );
+
+--25. * Tìm họ tên những LOPTRG thi không đạt quá 3 môn (mỗi môn đều thi không đạt ở tất cả các lần thi). 
+SELECT HO + ' ' + TEN AS 'Họ tên những LOPTRG thi không đạt quá 3 môn'
+FROM HOCVIEN, LOP, KETQUATHI
+WHERE HOCVIEN.MAHV = LOP.TRGLOP
+      AND HOCVIEN.MAHV = KETQUATHI.MAHV
+      AND KETQUATHI.KQUA = 'KHONG DAT'
+GROUP BY LOP.TRGLOP, HO, TEN
+HAVING COUNT(*) > 3;
+
+--26. Tìm học viên (mã học viên, họ tên) có số môn đạt điểm 9, 10 nhiều nhất.
+SELECT HOCVIEN.MAHV, HO + ' ' + TEN AS HOTEN
+FROM HOCVIEN, KETQUATHI
+WHERE HOCVIEN.MAHV = KETQUATHI.MAHV
+      AND DIEM >= 9
+GROUP BY HOCVIEN.MAHV, HO, TEN
+HAVING COUNT(*) >= ALL (
+SELECT COUNT(*)
+FROM KETQUATHI
+WHERE DIEM >= 9
+GROUP BY MAHV
+);
+
+--27. Trong từng lớp, tìm học viên (mã học viên, họ tên) có số môn đạt điểm 9, 10 nhiều nhất.
+SELECT MALOP, MAHV, HOTEN
+FROM (
+      SELECT MALOP, HOCVIEN.MAHV, (HO + ' ' + TEN) HOTEN, COUNT(*) SOLUONGDIEM,
+      RANK() OVER (
+      PARTITION BY MALOP
+      ORDER BY COUNT(*) DESC
+      ) AS XEPHANG
+      FROM HOCVIEN, KETQUATHI
+      WHERE HOCVIEN.MAHV = KETQUATHI.MAHV AND DIEM >= 9
+      GROUP BY MALOP, HOCVIEN.MAHV, HO, TEN
+) AS A
+WHERE A.XEPHANG = 1;
+
+--28. Trong từng học kỳ của từng năm, mỗi giáo viên phân công dạy bao nhiêu môn học, bao nhiêu lớp.
+SELECT MAGV, COUNT(DISTINCT MAMH) 'SỐ MÔN HỌC', COUNT(DISTINCT MALOP) 'SỐ LỚP'
+FROM GIANGDAY
+GROUP BY MAGV;
+
+--29. Trong từng học kỳ của từng năm, tìm giáo viên (mã giáo viên, họ tên) giảng dạy nhiều nhất.
+SELECT HOCKY, NAM, A.MAGV, HOTEN
+FROM GIAOVIEN,
+(
+      SELECT HOCKY, NAM, MAGV, RANK() OVER (PARTITION BY HOCKY, NAM ORDER BY COUNT(*) DESC) AS XEPHANG
+      FROM GIANGDAY
+      GROUP BY HOCKY, NAM, MAGV
+) AS A
+WHERE A.MAGV = GIAOVIEN.MAGV AND XEPHANG = 1
+ORDER BY NAM, HOCKY;
+
+--30. Tìm môn học (mã môn học, tên môn học) có nhiều học viên thi không đạt (ở lần thi thứ 1) nhất.
+SELECT MONHOC.MAMH, TENMH
+FROM MONHOC, KETQUATHI
+WHERE MONHOC.MAMH = KETQUATHI.MAMH
+      AND LANTHI = 1
+      AND KQUA = 'KHONG DAT'
+GROUP BY MONHOC.MAMH, TENMH
+HAVING COUNT(*) >= ALL (
+SELECT COUNT(*) 
+FROM KETQUATHI 
+WHERE LANTHI = 1 AND KQUA = 'KHONG DAT' 
+GROUP BY MAMH
+);
+
+--31. Tìm học viên (mã học viên, họ tên) thi môn nào cũng đạt (chỉ xét lần thi thứ 1).
+SELECT DISTINCT HOCVIEN.MAHV, (HO + ' ' + TEN) HOTEN
+FROM HOCVIEN, KETQUATHI
+WHERE HOCVIEN.MAHV = KETQUATHI.MAHV
+      AND NOT EXISTS (
+            SELECT *
+            FROM KETQUATHI
+            WHERE LANTHI = 1
+            AND KQUA = 'KHONG DAT'
+            AND MAHV = HOCVIEN.MAHV
+      );
+
+--32. Tìm học viên (mã học viên, họ tên) thi môn nào cũng đạt (chỉ xét lần thi sau cùng).
+SELECT DISTINCT HOCVIEN.MAHV, (HO + ' ' + TEN) HOTEN
+FROM HOCVIEN, KETQUATHI
+WHERE HOCVIEN.MAHV = KETQUATHI.MAHV 
+      AND NOT EXISTS (
+            SELECT *
+            FROM KETQUATHI 
+            WHERE LANTHI = (SELECT MAX(LANTHI) FROM KETQUATHI WHERE MAHV = HOCVIEN.MAHV GROUP BY MAHV)
+            AND KQUA = 'KHONG DAT'
+            AND MAHV = HOCVIEN.MAHV
+      );
+
+--33. Tìm học viên (mã học viên, họ tên) đã thi tất cả các môn và đều đạt (chỉ xét lần thi thứ 1).
+SELECT MAHV, (HO + ' ' + TEN) HOTEN
+FROM HOCVIEN
+WHERE NOT EXISTS (
+      SELECT * 
+      FROM MONHOC 
+      WHERE NOT EXISTS (
+            SELECT * 
+            FROM KETQUATHI 
+            WHERE KETQUATHI.MAMH = MONHOC.MAMH
+                  AND KETQUATHI.MAHV = HOCVIEN.MAHV
+                  AND LANTHI = 1 
+                  AND KQUA = 'DAT'
+      )
+);
+
+--34. Tìm học viên (MAHV, HOTEN) đã thi tất cả các môn và đều đạt (chỉ xét lần thi sau cùng).
+SELECT MAHV, (HO + ' ' + TEN) AS HOTEN
+FROM HOCVIEN
+WHERE NOT EXISTS (SELECT MAMH FROM MONHOC
+WHERE NOT EXISTS (SELECT * FROM KETQUATHI WHERE KETQUATHI.MAMH = MONHOC.MAMH AND KETQUATHI.MAHV = HOCVIEN.MAHV AND LANTHI = (SELECT MAX(LANTHI)
+FROM KETQUATHI AS KT WHERE KT.MAMH = MONHOC.MAMH AND KT.MAHV = HOCVIEN.MAHV)
+AND KQUA = 'DAT')
+);
+
+--35. Tìm học viên (mã học viên, họ tên) có điểm thi cao nhất trong từng môn (lấy điểm ở lần thi sau cùng).
+SELECT MAMH, MAHV, HOTEN
+FROM (
+      SELECT MAMH, HOCVIEN.MAHV, (HO + ' ' + TEN) HOTEN, RANK() OVER (PARTITION BY MAMH ORDER BY MAX(DIEM) DESC) AS XEPHANG
+      FROM HOCVIEN, KETQUATHI
+      WHERE HOCVIEN.MAHV = KETQUATHI.MAHV
+            AND LANTHI = (SELECT MAX(LANTHI) FROM KETQUATHI WHERE MAHV = HOCVIEN.MAHV GROUP BY MAHV)
+      GROUP BY MAMH, HOCVIEN.MAHV, HO, TEN
+) AS A
+WHERE XEPHANG = 1;
